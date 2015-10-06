@@ -3,6 +3,42 @@
 #include <Encoder.h>
 #include <LiquidCrystal.h>
 
+
+/*
+Motorcycle Computer
+By Philip Ahlers - www.philipahlers.com
+Hardware used: Teensy 3.2 - www.pjrc.com/store/teensy32.html
+Teensy code modifed to support low freqency PWM (<5Hz) - see https://forum.pjrc.com/threads/25164-2Hz-analogWriteFrequency-on-Teensy-3-1?p=80081&viewfull=1#post80081
+  Also uses PJRC Encoder libraries.
+For a rough description of the hardware this controls - see http://philipahlers.com/motorcycle-computer-the-screen-module/
+It's essentially a couple of rotary encoders, buttons, and 16x2 LCD.
+
+
+Left Knob - Grips Control (all the time, unless in a menu)
+Right Knob - Navigation (unless in a menu that requires it)
+Encoder button right - select
+Encoder button left - back
+Button Left - ?
+Button Right - ?
+
+Menu Structure:
+ -Heat Control (for gloves & jacket)
+ -Live Data
+ --Tach
+ --GPS Speed
+ --Speed
+ --G Forces
+ -Stats
+ --Max Speed
+ --Max RPM
+ --Max G
+ -Backlight Ctrl
+ --Red
+ --Blue
+ --Green
+ */
+
+
 #define ENC_L_BUT 19 //encoder buttons
 #define ENC_R_BUT 18
 
@@ -12,7 +48,7 @@
 #define ENC_L_WIRE1 14 //left encoder wires
 #define ENC_L_WIRE2 15
 
-#define RS 0 //lcd
+#define RS 0 //lcd pins
 #define EN 1
 #define DB4 2
 #define DB5 3
@@ -20,7 +56,7 @@
 #define DB7 5
 #define BLRed 9
 #define BLGrn 10
-#define BLBlu 11
+#define BLBlu 11 //end lcd pins
 
 #define GripsScreenDelay 1000 //time the heated grips screen appears for
 
@@ -28,10 +64,6 @@
 //use debouncer library
 Bounce debouncerLeft = Bounce();
 Bounce debouncerRight = Bounce();
-
-//menu selected? (for different screens)
-bool heatselect = false;
-bool backlightselect = false;
 
 //create an lcd object - use display wires: (RS,EN,DB4,DB5,DB6,DB7)
 LiquidCrystal lcd(RS, EN, DB4, DB5, DB6, DB7);
@@ -67,21 +99,45 @@ int jacketsetting = 0;
 int glovesetting = 0;
 int gripsetting = 0;
 unsigned long lastgripscontrol = 0;
+boolean menuSelected = false;
+
+enum menuTypes {
+  heatControl,
+  backlightControl
+};
+
+enum menuTypes currMenu;
 
 void on_heatcontrol_selected(MenuItem* p_menu_item)
 {
-  heatselect = true;
+  menuSelected = true;
+  currMenu = heatControl;
+  heatcontroldisplay();
 }
 
 void on_backlightcontrol_selected(MenuItem* p_menu_item)
 {
-  backlightselect = true;
+  menuSelected = true;
+  currMenu = backlightControl;
 }
 
+void on_red_selected(MenuItem* p_menu_item)
+{
+
+}
+void on_green_selected(MenuItem* p_menu_item)
+{
+
+}
+void on_blue_selected(MenuItem* p_menu_item)
+{
+
+}
 void on_item3_selected(MenuItem* p_menu_item)
 {
-  
+
 }
+
 
 //prints the menu to the lcd
 void displayMenu() {
@@ -95,9 +151,7 @@ void displayMenu() {
   lcd.print(cp_menu->get_selected()->get_name()); //the current menu item
 }
 
-
 void heatcontroldisplay() {
-
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.write(127);
@@ -109,7 +163,6 @@ void heatcontroldisplay() {
     lcd.write(255);
   }
   lcd.setCursor(9, 1);
-
   for (a = 0; a < jacketsetting / 14.29; a++) {
     lcd.write(255);
   }
@@ -125,7 +178,7 @@ void gripscontroldisplay() {
   for (a = 0; a < gripsetting / 6.25; a++) {
     lcd.write(255);
   }
-  lcd.setCursor(6,1);
+  lcd.setCursor(6, 1);
   lcd.print(gripsetting);
   lcd.write("%");
 }
@@ -134,8 +187,7 @@ void backlightcontroldisplay() {
   lcd.clear();
   lcd.setCursor(1, 0);
   lcd.print("Backlight Ctrl");
-  lcd.setCursor(5,1);
-
+  lcd.setCursor(5, 1);
 }
 
 
@@ -153,11 +205,19 @@ void buttonHandler() {
 
   //left encoder clockwise
   if (newLeft > positionLeft) {
-    if (heatselect) {
-      if (glovesetting < 100) {
-        glovesetting = glovesetting + 2;
-        heatcontroldisplay();
-      }
+    if (menuSelected) {
+      switch (currMenu) { //this switches between the different menu cases
+        case heatControl :
+          if (glovesetting < 100) {
+            glovesetting = glovesetting + 2;
+            heatcontroldisplay();
+          }
+          break;
+        case backlightControl :
+          break;
+        default :
+          break;
+      } //end of the switch
     }
     else {
       gripscontroldisplay();
@@ -167,12 +227,21 @@ void buttonHandler() {
     }
     positionLeft = newLeft;
   }
-  //left encoder counterclockwise
+
+  // called whenever left encoder moves counterclockwise
   if (newLeft < positionLeft) {
-    if (heatselect) {
-      if (glovesetting > 0) {
-        glovesetting = glovesetting - 2;
-        heatcontroldisplay();
+    if (menuSelected) {
+      switch (currMenu) { //this switches between the different menu cases
+        case heatControl :
+          if (glovesetting > 0) {
+            glovesetting = glovesetting - 2;
+            heatcontroldisplay();
+          }
+          break;
+        case backlightControl :
+          break;
+        default:
+          break;
       }
     }
     else {
@@ -187,25 +256,43 @@ void buttonHandler() {
 
   //right encoder clockwise
   if (newRight > positionRight) {
-    if (heatselect) {
-      if (jacketsetting < 100) {
-        jacketsetting = jacketsetting + 2;
-        heatcontroldisplay();
-      }
-    }  
+    if (menuSelected) {
+      switch (currMenu) {
+        case heatControl :
+          if (jacketsetting < 100) {
+            jacketsetting = jacketsetting + 2;
+            heatcontroldisplay();
+          }
+          break;
+        case backlightControl :
+          break;
+        default :
+          break;
+      } //end switch
+    }
     else {
       ms.next();
       displayMenu();
     }
     positionRight = newRight;
   }
+
+
   //right encoder counter clockwise
   if (newRight < positionRight) {
-    if (heatselect) { 
-      if (jacketsetting > 0) {
-        jacketsetting = jacketsetting - 2;
-        heatcontroldisplay();
-      }
+    if (menuSelected) {
+      switch (currMenu) {
+        case heatControl :
+          if (jacketsetting > 0) {
+            jacketsetting = jacketsetting - 2;
+            heatcontroldisplay();
+          }
+          break;
+        case backlightControl :
+          break;
+        default :
+          break;
+      } //end switch
     }
     else {
       ms.prev();
@@ -216,26 +303,40 @@ void buttonHandler() {
 
 
   if (leftbut == LOW) {
-    if (heatselect) {
-      heatselect = false;
+    if (menuSelected) {
+      switch (currMenu) {
+        case heatControl :
+          menuSelected = false;
+          break;
+        case backlightControl :
+          menuSelected = false;
+          break;
+        default :
+          break;
+      } //end switch
     }
-    if (backlightselect){
-      backlightselect = false;
-    }
+    else {
       ms.back();
       displayMenu();
+    }
   }
 
 
   if (rightbut == LOW)   {
-    if (heatselect) {
-    }
-    if (backlightselect) {
-
+    if (menuSelected) {
+      switch (currMenu) {
+        case heatControl :
+          break;
+        case backlightControl :
+          break;
+        default :
+          break;
+      } //end switch
     }
     else {
       ms.select();
-      displayMenu();
+      if (!menuSelected)
+        displayMenu();
     }
   }
 
@@ -247,37 +348,18 @@ void buttonHandler() {
 
 
 
-
-
-
-
 //=============================================================================================
 //this code gets run once
 void setup() {
-  lcd.begin(16, 2);
+  lcd.begin(16, 2); //initialize the LCD
 
-  //giving buttons the debounce library - i think this library helps to clean up the main code a bit
+  //setting the pinmodes of the buttons & using the debounce library on them
   pinMode(ENC_L_BUT, INPUT_PULLUP);
   debouncerLeft.attach(ENC_L_BUT);
   debouncerLeft.interval(10);
   pinMode(ENC_R_BUT, INPUT_PULLUP);
   debouncerRight.attach(ENC_R_BUT);
   debouncerRight.interval(10);
-
-  /*
-  Menu Structure:
-   -Heat Control
-   -Live Data
-   --Tach
-   --GPS Speed
-   --Speed
-   --G Forces
-   -Stats
-   --Max Speed
-   --Max RPM
-   --Max G
-   -Backlight Ctrl
-   */
 
   //add in the menus, items, and their select actions
   mm.add_item(&mm_mi1, &on_heatcontrol_selected);
@@ -291,12 +373,13 @@ void setup() {
   mu2.add_item(&mu2_mi2, &on_item3_selected);
   mu2.add_item(&mu2_mi3, &on_item3_selected);
   mm.add_menu(&mu3);
+  mu3.add_item(&mu3_mi1, &on_red_selected);
+  mu3.add_item(&mu3_mi2, &on_blue_selected);
+  mu3.add_item(&mu3_mi3, &on_green_selected);
   ms.set_root_menu(&mm);
   displayMenu();
 }
 //=========================================================================================
-
-
 
 
 
