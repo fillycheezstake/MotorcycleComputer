@@ -54,9 +54,12 @@ Menu Structure:
 #define DB5 3
 #define DB6 4
 #define DB7 5
-#define BLRed 9
-#define BLGrn 10
-#define BLBlu 11 //end lcd pins
+#define BLRed 99
+#define BLGrn 99
+#define BLBlu 99 //end lcd pins
+
+#define JACK_PIN 9
+#define GRIPS_PIN 10 
 
 #define GripsScreenDelay 1000 //time the heated grips screen appears for
 
@@ -166,6 +169,9 @@ void heatcontroldisplay() {
   for (a = 0; a < jacketsetting / 14.29; a++) {
     lcd.write(255);
   }
+
+  //call updateheat every time this changes as well.
+  updateheat();
 }
 
 void gripscontroldisplay() {
@@ -188,6 +194,12 @@ void backlightcontroldisplay() {
   lcd.setCursor(1, 0);
   lcd.print("Backlight Ctrl");
   lcd.setCursor(5, 1);
+}
+
+void updateheat() {
+  //analogwrite for PWM control pin,dutycycle 
+  analogWrite(JACK_PIN, (int)jacketsetting/100*255);
+  analogWrite(GRIPS_PIN, (int)gripsetting/100*255);
 }
 
 
@@ -335,7 +347,7 @@ void buttonHandler() {
     }
     else {
       ms.select();
-      if (!menuSelected)
+      if (!menuSelected) // since ms.select can actually change the state of menuSelected
         displayMenu();
     }
   }
@@ -361,6 +373,12 @@ void setup() {
   debouncerRight.attach(ENC_R_BUT);
   debouncerRight.interval(10);
 
+  //setting frequency for PWM - this effects pins 5, 6, 9, 10, 20, 21, 22, 23 as they use the same timer (FTM0)
+  analogWriteFrequency(JACK_PIN, 1);
+  analogWriteFrequency(GRIPS_PIN, 1);
+  //this sets the resolution of the PWM control, in bits. EX: 8 bit = 2^8 = 256, so 0-255
+  analogWriteResolution(8);
+  
   //add in the menus, items, and their select actions
   mm.add_item(&mm_mi1, &on_heatcontrol_selected);
   mm.add_menu(&mu1);
